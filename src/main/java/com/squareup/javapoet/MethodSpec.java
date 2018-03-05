@@ -16,6 +16,8 @@
 package com.squareup.javapoet;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -261,6 +263,110 @@ public final class MethodSpec {
     return builder;
   }
 
+  /**
+   * Returns a new method spec builder that overrides {@code method}.
+   *
+   * <p>This will copy its visibility modifiers, type parameters, return type, name, parameters, and
+   * throws declarations. An {@link Override} annotation will be added.
+   */
+  public static Builder overriding(Method method) {
+    checkNotNull(method, "method == null");
+
+    Class<?> enclosingClass = method.getDeclaringClass();
+    if (java.lang.reflect.Modifier.isFinal(enclosingClass.getModifiers())) {
+      throw new IllegalArgumentException(
+          "Cannot override method on final class " + enclosingClass.getName());
+    }
+
+    int modifiers = method.getModifiers();
+    if (java.lang.reflect.Modifier.isPrivate(modifiers)) {
+      throw new IllegalArgumentException("Cannot override private method.");
+    }
+    if (java.lang.reflect.Modifier.isFinal(modifiers)) {
+      throw new IllegalArgumentException("Cannot override final method.");
+    }
+    if (java.lang.reflect.Modifier.isStatic(modifiers)) {
+      throw new IllegalArgumentException("Cannot override static method.");
+    }
+
+    String methodName = method.getName();
+    MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName);
+
+    methodBuilder.addAnnotation(Override.class);
+
+    Set<Modifier> modifierSet = new LinkedHashSet<>();
+    if (java.lang.reflect.Modifier.isPublic(modifiers)) {
+      modifierSet.add(Modifier.PUBLIC);
+    } else if (java.lang.reflect.Modifier.isProtected(modifiers)) {
+      modifierSet.add(Modifier.PROTECTED);
+    }
+    if (java.lang.reflect.Modifier.isTransient(modifiers)) {
+      modifierSet.add(Modifier.TRANSIENT);
+    }
+    if (java.lang.reflect.Modifier.isVolatile(modifiers)) {
+      modifierSet.add(Modifier.VOLATILE);
+    }
+    if (java.lang.reflect.Modifier.isSynchronized(modifiers)) {
+      modifierSet.add(Modifier.SYNCHRONIZED);
+    }
+    if (java.lang.reflect.Modifier.isNative(modifiers)) {
+      modifierSet.add(Modifier.NATIVE);
+    }
+    if (java.lang.reflect.Modifier.isStrict(modifiers)) {
+      modifierSet.add(Modifier.STRICTFP);
+    }
+    methodBuilder.addModifiers(modifierSet);
+
+    for (java.lang.reflect.TypeVariable<Method> typeVariable : method.getTypeParameters()) {
+      methodBuilder.addTypeVariable(TypeVariableName.get(typeVariable));
+    }
+
+    methodBuilder.returns(TypeName.get(method.getGenericReturnType()));
+    methodBuilder.addParameters(ParameterSpec.parametersOf(method));
+    methodBuilder.varargs(method.isVarArgs());
+
+    for (Type thrownType : method.getGenericExceptionTypes()) {
+      methodBuilder.addException(thrownType);
+    }
+
+    return methodBuilder;
+  }
+
+  /**
+   * Returns a new method spec builder that overrides {@code method} as a member of {@code
+   * enclosing}. This will resolve type parameters: for example overriding {@link
+   * Comparable#compareTo} in a type that implements {@code Comparable<Movie>}, the {@code T}
+   * parameter will be resolved to {@code Movie}.
+   *
+   * <p>This will copy its visibility modifiers, type parameters, return type, name, parameters, and
+   * throws declarations. An {@link Override} annotation will be added.
+   */
+  public static Builder overriding(Method method, Class<?> enclosing) {
+    Type resolvedReturnType =
+        ResolvingTypes.resolve(enclosing, enclosing, method.getGenericReturnType());
+
+    Builder builder = overriding(method);
+
+    builder.returns(resolvedReturnType);
+
+    Parameter[] parameters = method.getParameters();
+    for (int i = 0, size = builder.parameters.size(); i < size; i++) {
+      ParameterSpec parameter = builder.parameters.get(i);
+      TypeName type = TypeName.get(
+          ResolvingTypes.resolve(enclosing, enclosing, parameters[i].getParameterizedType()));
+      builder.parameters.set(i, parameter.toBuilder(type, parameter.name).build());
+    }
+
+    builder.exceptions.clear();
+    Type[] genericExceptionTypes = method.getGenericExceptionTypes();
+    for (Type genericExceptionType : genericExceptionTypes) {
+      builder.addException(
+          TypeName.get(ResolvingTypes.resolve(enclosing, enclosing, genericExceptionType)));
+    }
+
+    return builder;
+  }
+
   public Builder toBuilder() {
     Builder builder = new Builder(name);
     builder.javadoc.add(javadoc);
@@ -455,7 +561,7 @@ public final class MethodSpec {
 
     /**
      * @param controlFlow the control flow construct and its code, such as "else if (foo == 10)".
-     *     Shouldn't contain braces or newline characters.
+     * Shouldn't contain braces or newline characters.
      */
     public Builder nextControlFlow(String controlFlow, Object... args) {
       code.nextControlFlow(controlFlow, args);
@@ -469,7 +575,7 @@ public final class MethodSpec {
 
     /**
      * @param controlFlow the optional control flow construct and its code, such as
-     *     "while(foo == 20)". Only used for "do/while" control flows.
+     * "while(foo == 20)". Only used for "do/while" control flows.
      */
     public Builder endControlFlow(String controlFlow, Object... args) {
       code.endControlFlow(controlFlow, args);

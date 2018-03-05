@@ -16,6 +16,8 @@
 package com.squareup.javapoet;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -87,9 +89,25 @@ public final class ParameterSpec {
         .build();
   }
 
+  private static ParameterSpec get(Parameter parameter) {
+    TypeName type = TypeName.get(parameter.getParameterizedType());
+    String name = parameter.getName();
+    return ParameterSpec.builder(type, name).build();
+  }
+
   static List<ParameterSpec> parametersOf(ExecutableElement method) {
     List<ParameterSpec> result = new ArrayList<>();
     for (VariableElement parameter : method.getParameters()) {
+      result.add(ParameterSpec.get(parameter));
+    }
+    return result;
+  }
+
+  static List<ParameterSpec> parametersOf(Method method) {
+    Parameter[] parameters = method.getParameters();
+    int size = parameters.length;
+    List<ParameterSpec> result = new ArrayList<>(size);
+    for (Parameter parameter : parameters) {
       result.add(ParameterSpec.get(parameter));
     }
     return result;

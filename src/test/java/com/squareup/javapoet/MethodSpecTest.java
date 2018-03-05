@@ -20,6 +20,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -250,6 +251,98 @@ public final class MethodSpecTest {
       fail();
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("cannot override method with modifiers: [static]");
+    }
+  }
+
+  @Test public void overrideEverythingReflect() {
+    MethodSpec method = MethodSpec.overriding(Everything.class.getDeclaredMethods()[0]).build();
+    assertThat(method.toString()).isEqualTo(""
+        + "@java.lang.Override\n"
+        + "protected <T extends java.lang.Runnable & java.io.Closeable> java.lang.Runnable "
+        + "everything(\n"
+        + "    java.lang.String arg0, java.util.List<? extends T> arg1) throws java.io.IOException,\n"
+        + "    java.lang.SecurityException {\n"
+        + "}\n");
+  }
+
+  @Test public void overrideGenericsReflect() {
+    MethodSpec method = MethodSpec.overriding(Generics.class.getDeclaredMethods()[0])
+        .addStatement("return null")
+        .build();
+    assertThat(method.toString()).isEqualTo(""
+        + "@java.lang.Override\n"
+        + "<T, R, V extends java.lang.Throwable> T run(R arg0) throws V {\n"
+        + "  return null;\n"
+        + "}\n");
+  }
+
+  @Test public void overrideDoesNotCopyOverrideAnnotationReflect() {
+    MethodSpec method = MethodSpec.overriding(HasAnnotation.class.getDeclaredMethods()[0]).build();
+    assertThat(method.toString()).isEqualTo(""
+        + "@java.lang.Override\n"
+        + "public java.lang.String toString() {\n"
+        + "}\n");
+  }
+
+  @Test public void overrideDoesNotCopyDefaultModifierReflect() throws Exception {
+    Method exec = ExtendsIterableWithDefaultMethods.class.getMethod("spliterator");
+    MethodSpec method =
+        MethodSpec.overriding(exec, ExtendsIterableWithDefaultMethods.class).build();
+    assertThat(method.toString()).isEqualTo(""
+        + "@java.lang.Override\n"
+        + "public java.util.Spliterator<java.lang.Object> spliterator() {\n"
+        + "}\n");
+  }
+
+  @Test public void overrideExtendsOthersWorksWithActualTypeParametersReflect() throws Exception {
+    Method exec = ExtendsOthers.class.getMethod("call");
+    MethodSpec method = MethodSpec.overriding(exec, ExtendsOthers.class).build();
+    assertThat(method.toString()).isEqualTo(""
+        + "@java.lang.Override\n"
+        + "public java.lang.Integer call() throws java.lang.Exception {\n"
+        + "}\n");
+    exec = ExtendsOthers.class.getMethod("compareTo", Object.class);
+    method = MethodSpec.overriding(exec, ExtendsOthers.class).build();
+    assertThat(method.toString()).isEqualTo(""
+        + "@java.lang.Override\n"
+        + "public int compareTo(" + ExtendsOthers.class.getCanonicalName() + " arg0) {\n"
+        + "}\n");
+    exec = ExtendsOthers.class.getMethod("fail");
+    method = MethodSpec.overriding(exec, ExtendsOthers.class).build();
+    assertThat(method.toString()).isEqualTo(""
+        + "@java.lang.Override\n"
+        + "public void fail() throws java.lang.IllegalStateException {\n"
+        + "}\n");
+  }
+
+  @Test public void overrideFinalClassMethodReflect() {
+    try {
+      MethodSpec.overriding(FinalClass.class.getDeclaredMethods()[0]);
+      fail();
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo(
+          "Cannot override method on final class com.squareup.javapoet.MethodSpecTest$FinalClass");
+    }
+  }
+
+  @Test public void overrideInvalidModifiersReflect() throws Exception {
+    try {
+      MethodSpec.overriding(InvalidOverrideMethods.class.getDeclaredMethod("finalMethod"));
+      fail();
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Cannot override final method.");
+    }
+    try {
+      MethodSpec.overriding(InvalidOverrideMethods.class.getDeclaredMethod("privateMethod"));
+      fail();
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Cannot override private method.");
+    }
+    try {
+      MethodSpec.overriding(InvalidOverrideMethods.class.getDeclaredMethod("staticMethod"));
+      fail();
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Cannot override static method.");
     }
   }
 
